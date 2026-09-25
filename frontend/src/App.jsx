@@ -1,36 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { useEffect, useState } from 'react';
+import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import { getColumns, createTask, deleteTask, moveTask } from './api';
-
-function TaskCard({ item, index, onDelete }) {
-  return (
-    <Draggable draggableId={String(item.id)} index={index}>
-      {(provided, snapshot) => (
-        <div
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-          className={`bg-white rounded-lg shadow p-3 mb-3 select-none group relative ${
-            snapshot.isDragging ? "shadow-lg ring-2 ring-blue-400" : ""
-          }`}
-        >
-          <button
-            type="button"
-            onClick={onDelete}
-            className="absolute top-1 right-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 px-1 text-sm"
-            aria-label="Delete task"
-          >
-            ×
-          </button>
-          <p className="font-medium text-slate-800 pr-4">{item.title}</p>
-          {item.description && (
-            <p className="text-sm text-slate-500 mt-1">{item.description}</p>
-          )}
-        </div>
-      )}
-    </Draggable>
-  );
-}
+import TaskCard from './components/TaskCard';
+import { boardFromColumns, moveCard } from './lib/board';
 
 function App() {
   const [columns, setColumns] = useState({});
@@ -42,12 +14,9 @@ function App() {
   useEffect(() => {
     getColumns()
       .then((data) => {
-        const map = {};
-        data.forEach((col) => {
-          map[col.id] = { ...col, items: col.tasks };
-        });
-        setColumns(map);
-        setColumnOrder(data.map((col) => col.id));
+        const board = boardFromColumns(data);
+        setColumns(board.columns);
+        setColumnOrder(board.columnOrder);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -57,36 +26,9 @@ function App() {
     if (!result.destination) return;
 
     const { source, destination, draggableId } = result;
-    const sourceColId = Number(source.droppableId);
-    const destColId = Number(destination.droppableId);
+    setColumns(moveCard(columns, source, destination));
 
-    if (sourceColId !== destColId) {
-      const sourceCol = columns[sourceColId];
-      const destCol = columns[destColId];
-      const sourceItems = [...sourceCol.items];
-      const destItems = [...destCol.items];
-
-      const [removed] = sourceItems.splice(source.index, 1);
-      destItems.splice(destination.index, 0, removed);
-
-      setColumns({
-        ...columns,
-        [sourceColId]: { ...sourceCol, items: sourceItems },
-        [destColId]: { ...destCol, items: destItems }
-      });
-    } else {
-      const column = columns[sourceColId];
-      const copiedItems = [...column.items];
-      const [removed] = copiedItems.splice(source.index, 1);
-      copiedItems.splice(destination.index, 0, removed);
-
-      setColumns({
-        ...columns,
-        [sourceColId]: { ...column, items: copiedItems }
-      });
-    }
-
-    moveTask(Number(draggableId), destColId, destination.index).catch((err) =>
+    moveTask(Number(draggableId), Number(destination.droppableId), destination.index).catch((err) =>
       setError(`Failed to save move: ${err.message}`)
     );
   };
